@@ -5,24 +5,45 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
+	"net"
 )
 
 func main() {
-	// Open messages.txt
-	file, err := os.Open("messages.txt")
+	// Create a listener
+	listener, err := net.Listen("tcp", ":42069")
 	if err != nil {
-		log.Printf("error opening file: %v", err)
-		return
+		log.Fatalf("error creating listener: %v", err)
 	}
-	defer file.Close()
+	defer listener.Close()
 
-	lines := getLinesChannel(file)
+	fmt.Println("Server is listening on :42069")
+
+	for {
+		// Accept a connection
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("error creating connection: %v", err)
+			continue
+		}
+		fmt.Println("A connection has been accepted")
+
+		// Handle the connection in a new goroutine
+		go handleConnection(conn)
+	}
+}
+
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	lines := getLinesChannel(conn)
 
 	// Loop over the returned channel
 	for line := range lines {
-		fmt.Printf("read: %s", line)
+		fmt.Printf("%s", line)
 	}
+	fmt.Print("\n") // Print a final terminating newline
+
+	fmt.Println("The connection has been closed")
 }
 
 func getLinesChannel(f io.ReadCloser) <-chan string {
@@ -31,8 +52,9 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
 
 	go func() {
 		defer f.Close()
+		defer close(ch)
 
-		buffer := make([]byte, 0, 10) // Buffer to accumulate bytes until a newline is found
+		buffer := make([]byte, 0, 64) // Buffer to accumulate bytes until a newline is found
 		readBuffer := make([]byte, 8) // Buffer to read 8 bytes at a time
 
 		// Read the file
@@ -63,7 +85,11 @@ func getLinesChannel(f io.ReadCloser) <-chan string {
 				buffer = buffer[newLineIndex+1:]
 			}
 		}
-		close(ch)
+		// Send any remaining data as the last line
+		if len(buffer) > 0 {
+			line := string(buffer)
+			ch <- line
+		}
 	}()
 	return ch
 }

@@ -19,7 +19,7 @@ func TestParseAll(t *testing.T) {
 	n, err := headers.ParseAll(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers["host"])
 	assert.Equal(t, 25, n)
 
 	// Test: Invalid spacing header
@@ -35,7 +35,7 @@ func TestParseAll(t *testing.T) {
 	n, err = headers.ParseAll(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers["host"])
 	assert.Equal(t, 49, n)
 
 	// Test: Valid 2 headers with existing headers
@@ -44,8 +44,8 @@ func TestParseAll(t *testing.T) {
 	n, err = headers.ParseAll(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
-	assert.Equal(t, "curl/7.81.0", headers["User-Agent"])
+	assert.Equal(t, "localhost:42069", headers["host"])
+	assert.Equal(t, "curl/7.81.0", headers["user-agent"])
 	assert.Equal(t, 50, n)
 
 	// Test: Valid done
@@ -55,4 +55,11 @@ func TestParseAll(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	assert.Equal(t, 2, n)
+
+	// Test: Invalid character in header key
+	headers = NewHeaders()
+	data = []byte("H@st: localhost:42069\r\n\r\n")
+	n, err = headers.ParseAll(data)
+	require.Error(t, err)
+	assert.Equal(t, 0, n)
 }

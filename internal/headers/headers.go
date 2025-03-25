@@ -2,6 +2,7 @@ package headers
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 )
 
@@ -42,6 +43,15 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	// Trim whitespace from key and value
 	key := strings.TrimSpace(parts[0])
 	value := strings.TrimSpace(parts[1])
+
+	// Return an error if the key contains an invalid character
+	re := regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+.\-^_` + "`|~]*$")
+	if !re.MatchString(key) {
+		return 0, false, errors.New("invalid header key")
+	}
+
+	// Always lowercase the key
+	key = strings.ToLower(key)
 
 	// Add the key-value pair to the Headers map
 	h[key] = value

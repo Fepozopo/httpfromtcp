@@ -53,8 +53,14 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	// Always lowercase the key
 	key = strings.ToLower(key)
 
-	// Add the key-value pair to the Headers map
-	h[key] = value
+	// Check if the key already exists in the map
+	if existingValue, exists := h[key]; exists {
+		// Append the new value to the existing value, separated by a comma
+		h[key] = existingValue + ", " + value
+	} else {
+		// Add the key-value pair to the Headers map
+		h[key] = value
+	}
 
 	// Return the number of bytes consumed, done=false since we haven't hit the end yet
 	return n, false, nil

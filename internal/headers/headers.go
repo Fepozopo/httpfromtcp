@@ -1,90 +1,84 @@
 package headers
 
 import (
-	"errors"
-	"regexp"
+	"bytes"
+	"fmt"
 	"strings"
 )
 
+const crlf = "\r\n" // Constant for CRLF (Carriage Return + Line Feed) used in HTTP headers
+
+// Headers is a map that stores HTTP header key-value pairs
 type Headers map[string]string
 
-// Parse method for Headers
-func (h Headers) Parse(data []byte) (n int, done bool, err error) {
-	// Convert data to string for easier manipulation
-	strData := string(data)
+// NewHeaders creates and returns a new Headers map
+func NewHeaders() Headers {
+	return map[string]string{}
+}
 
-	// Look for the CRLF sequence
-	crlfIndex := strings.Index(strData, "\r\n")
-	if crlfIndex == -1 {
-		// No CRLF found, not enough data
+// Parse processes the provided byte slice to extract headers
+// It returns the number of bytes consumed, whether the headers are done, and any error encountered
+func (h Headers) Parse(data []byte) (n int, done bool, err error) {
+	// Find the index of the first CRLF in the data
+	idx := bytes.Index(data, []byte(crlf))
+	if idx == -1 {
+		// No CRLF found, meaning we can't parse any headers yet
 		return 0, false, nil
 	}
-
-	// If CRLF is at the start, we've reached the end of headers
-	if crlfIndex == 0 {
+	if idx == 0 {
+		// An empty line indicates the end of headers; consume the CRLF
 		return 2, true, nil
 	}
 
-	// Extract the header line before the CRLF
-	headerLine := strData[:crlfIndex]
-	n = crlfIndex + 2 // Number of bytes consumed (including CRLF)
+	// Split the header line into key and value at the first colon
+	parts := bytes.SplitN(data[:idx], []byte(":"), 2)
+	key := strings.ToLower(string(parts[0])) // Convert the key to lowercase
 
-	// Check for spaces before the colon in the original header line
-	if strings.Contains(headerLine, " :") {
-		return 0, false, errors.New("invalid header format: spaces in key")
+	// Check for invalid header name (trailing spaces)
+	if key != strings.TrimRight(key, " ") {
+		return 0, false, fmt.Errorf("invalid header name: %s", key)
 	}
 
-	// Split the header line into key and value
-	parts := strings.SplitN(headerLine, ":", 2)
-	if len(parts) != 2 {
-		return 0, false, errors.New("invalid header format")
+	// Trim whitespace from the value and validate the key
+	value := bytes.TrimSpace(parts[1])
+	key = strings.TrimSpace(key)
+	if !validTokens([]byte(key)) {
+		// Validate that the key contains only valid token characters
+		return 0, false, fmt.Errorf("invalid header token found: %s", key)
 	}
 
-	// Trim whitespace from key and value
-	key := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
-
-	// Return an error if the key contains an invalid character
-	re := regexp.MustCompile(`^[a-zA-Z0-9!#$%&'*+.\-^_` + "`|~]*$")
-	if !re.MatchString(key) {
-		return 0, false, errors.New("invalid header key")
-	}
-
-	// Always lowercase the key
-	key = strings.ToLower(key)
-
-	// Check if the key already exists in the map
-	if existingValue, exists := h[key]; exists {
-		// Append the new value to the existing value, separated by a comma
-		h[key] = existingValue + ", " + value
-	} else {
-		// Add the key-value pair to the Headers map
-		h[key] = value
-	}
-
-	// Return the number of bytes consumed, done=false since we haven't hit the end yet
-	return n, false, nil
+	// Set the header in the map
+	h.Set(key, string(value))
+	return idx + 2, false, nil // Return the number of bytes consumed and indicate that headers are not done
 }
 
-// ParseAll method for Headers
-func (h Headers) ParseAll(data []byte) (n int, err error) {
-	// Parse the headers until the end
-	for {
-		// Parse the header line
-		consumed, done, err := h.Parse(data)
-		if err != nil {
-			return 0, err
-		}
-
-		// Add the number of bytes consumed to the total number
-		n += consumed
-
-		// If we've reached the end of headers, return the total number of bytes
-		if done {
-			return n, nil
-		}
-
-		// Remove the parsed data from the buffer
-		data = data[consumed:]
+// Set adds or updates a header in the Headers map
+// If the key already exists, it appends the new value to the existing value
+func (h Headers) Set(key, value string) {
+	key = strings.ToLower(key) // Ensure the key is lowercase
+	v, ok := h[key]            // Check if the key already exists
+	if ok {
+		// If it exists, join the existing value with the new value
+		value = strings.Join([]string{
+			v,
+			value,
+		}, ", ")
 	}
+	h[key] = value // Set the key-value pair in the map
+}
+
+// tokenChars contains valid characters for HTTP header tokens
+var tokenChars = []byte{'!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'}
+
+// validTokens checks if the data contains only valid tokens
+// or characters that are allowed in a token
+func validTokens(data []byte) bool {
+	// Iterate through each character in the data
+	for _, c := range data {
+		// Check if the character is a letter, number, or one of the allowed characters
+		if !(('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9') || bytes.Contains(tokenChars, []byte{c})) {
+			return false // Invalid character found
+		}
+	}
+	return true // All characters are valid tokens
 }

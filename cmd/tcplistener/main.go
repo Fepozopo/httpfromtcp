@@ -42,4 +42,8 @@ func handleConnection(conn net.Conn) {
 	}
 
 	fmt.Printf("Request line:\n- Method: %s\n- Target: %s\n- Version: %s\n", requestLine.RequestLine.Method, requestLine.RequestLine.RequestTarget, requestLine.RequestLine.HttpVersion)
+	fmt.Print("Headers:\n")
+	for key, value := range requestLine.Headers {
+		fmt.Printf("- %s: %s\n", key, value)
+	}
 }

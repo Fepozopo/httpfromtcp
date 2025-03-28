@@ -46,4 +46,5 @@ func handleConnection(conn net.Conn) {
 	for key, value := range requestLine.Headers {
 		fmt.Printf("- %s: %s\n", key, value)
 	}
+	fmt.Printf("Body:\n%s\n", requestLine.Body)
 }

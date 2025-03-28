@@ -67,6 +67,12 @@ func (h Headers) Set(key, value string) {
 	h[key] = value // Set the key-value pair in the map
 }
 
+// Get retrieves the value for the given key, keeping case insensitivity in mind
+func (h Headers) Get(key string) string {
+	key = strings.ToLower(key) // Ensure the key is lowercase
+	return h[key]
+}
+
 // tokenChars contains valid characters for HTTP header tokens
 var tokenChars = []byte{'!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'}
 

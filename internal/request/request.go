@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/Fepozopo/httpfromtcp/internal/headers"
@@ -12,41 +13,31 @@ import (
 
 // Request represents a parsed HTTP request.
 type Request struct {
-	// RequestLine holds the information from the first line (method, target, version) of the request.
 	RequestLine RequestLine
-	// Headers holds all the parsed headers (using a helper package).
-	Headers headers.Headers
-
-	// state represents the current state in the parsing process.
-	state requestState
+	Headers     headers.Headers
+	state       requestState
+	Body        []byte
 }
 
 // RequestLine contains details parsed from the start-line of the HTTP request.
 type RequestLine struct {
-	// HttpVersion is the HTTP version of the request (e.g., "1.1").
-	HttpVersion string
-	// RequestTarget is the request target (e.g., URL path).
+	HttpVersion   string
 	RequestTarget string
-	// Method is the HTTP method (e.g., GET, POST).
-	Method string
+	Method        string
 }
 
 // requestState represents different stages in processing a request.
 type requestState int
 
 const (
-	// requestStateInitialized indicates that we haven't parsed anything yet.
 	requestStateInitialized requestState = iota
-	// requestStateParsingHeaders indicates that we have parsed the request-line and now we are parsing the headers.
 	requestStateParsingHeaders
-	// requestStateDone indicates that the entire HTTP request has been successfully parsed.
+	requestStateParsingBody
 	requestStateDone
 )
 
 const (
-	// crlf defines the carriage-return and line-feed separator used in HTTP.
-	crlf = "\r\n"
-	// bufferSize defines the initial size of the read buffer.
+	crlf       = "\r\n"
 	bufferSize = 8
 )
 
@@ -208,9 +199,32 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 		// When done parsing all headers, update the state.
 		if done {
-			r.state = requestStateDone
+			r.state = requestStateParsingBody
 		}
 		return n, nil
+
+	case requestStateParsingBody:
+		// If there is no Content-Length header, we're done.
+		if _, ok := r.Headers["content-length"]; !ok {
+			r.state = requestStateDone
+			return len(data), nil
+		}
+		// Append all the data to the requests .Body field.
+		r.Body = append(r.Body, data...)
+		// If the length of the body is greater than the Content-Length header, return an error.
+		contentLength, err := strconv.Atoi(r.Headers["content-length"])
+		if err != nil {
+			return 0, fmt.Errorf("invalid content-length header: %w", err)
+		}
+		if len(r.Body) > contentLength {
+			return 0, fmt.Errorf("error: body length greater than Content-Length")
+		}
+		// If the length of the body is equal to the Content-Length header, move to the done state.
+		if len(r.Body) == contentLength {
+			r.state = requestStateDone
+		}
+		// Report that you've consumed the entire length of the data you were given.
+		return len(data), nil
 
 	case requestStateDone:
 		// If parsing is already complete, any additional data is unexpected.

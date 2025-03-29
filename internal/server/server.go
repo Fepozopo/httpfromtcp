@@ -30,15 +30,9 @@ func Serve(port int) (*Server, error) {
 // If the server is already closed, this method will return nil.
 // Otherwise, it will return the error from closing the listener.
 func (s *Server) Close() error {
-	// Atomically swap the value of the closed field to true.
-	// If the value was already true, the method will return nil.
-	// Otherwise, it will return the error from closing the listener.
 	if s.closed.Swap(true) {
 		return nil
 	}
-	// Close the underlying listener.
-	// This will cause the Accept method to return an error,
-	// which will cause the goroutine in the listen method to exit.
 	return s.listener.Close()
 }
 
@@ -65,8 +59,10 @@ func (s *Server) handle(conn net.Conn) {
 	// Write a simple HTTP response back to the client
 	// The response includes the HTTP version, status code, headers, and body
 	_, err := conn.Write([]byte("HTTP/1.1 200 OK\r\n" + // HTTP version and status code
+		"Content-Length: 0\r\n" + // Header specifying the length of the body
+		"Connection: close\r\n" + // Header specifying that the connection should be closed
 		"Content-Type: text/plain\r\n\r\n" + // Header specifying the content type
-		"Hello World!")) // Body of the response
+		"")) // Body of the response
 	if err != nil {
 		fmt.Println(err)
 	}

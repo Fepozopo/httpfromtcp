@@ -73,6 +73,14 @@ func (h Headers) Get(key string) string {
 	return h[key]
 }
 
+// Override sets a header in the Headers map, overwriting any existing value for the given key
+// This function is used to explicitly set a header, whereas the Set function will append to an
+// existing value if the key already exists.
+func (h Headers) Override(key, value string) {
+	key = strings.ToLower(key)
+	h[key] = value
+}
+
 // tokenChars contains valid characters for HTTP header tokens
 var tokenChars = []byte{'!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'}
 

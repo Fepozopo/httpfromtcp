@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -168,25 +169,32 @@ func proxyHandler(w *response.Writer, req *request.Request) {
 	}
 	defer resp.Body.Close()
 
+	// Remove the Content-Length header
+	resp.Header.Del("Content-Length")
+
 	// Set status code from the response
 	w.WriteStatusLine(response.StatusCode(resp.StatusCode))
 
 	// Read the headers from the response
-	headers := headers.NewHeaders()
+	hdrs := headers.NewHeaders()
 	for key, value := range resp.Header {
 		for _, v := range value {
-			headers.Set(key, v)
+			hdrs.Set(key, v)
 		}
 	}
 
-	// Remove Content-Length and set Transfer-Encoding
-	headers.Override("Content-Length", "0")
-	headers.Override("Transfer-Encoding", "chunked")
+	// Set Trailer header to indicate we will send X-Content-SHA256 and X-Content-Length
+	hdrs.Override("Trailer", "x-content-sha256, x-content-length")
+
+	// Set Transfer-Encoding to chunked
+	hdrs.Override("Transfer-Encoding", "chunked")
 
 	// Write the headers to the client
-	w.WriteHeaders(headers)
+	w.WriteHeaders(hdrs)
 
 	// Read the response body in chunks and write them immediately
+	var responseBody []byte
+	contentLength := 0
 	buffer := make([]byte, 1024)
 	for {
 		n, err := resp.Body.Read(buffer)
@@ -198,13 +206,30 @@ func proxyHandler(w *response.Writer, req *request.Request) {
 			break
 		}
 
+		// Append the chunk
+		responseBody = append(responseBody, buffer[:n]...)
+
 		// Write the chunk
 		w.WriteChunkedBody(buffer[:n])
 
 		// Log the chunk size
+		contentLength += n
 		log.Printf("Read chunk of size %d", n)
 	}
 
+	// Calculate the SHA256 hash of the response body
+	hash := sha256.Sum256(responseBody)
+
+	// Add the following headers:
+	// X-Content-SHA256: <hash>
+	// X-Content-Length: <length of raw body in bytes>
+	trailers := headers.NewHeaders()
+	trailers.Set("X-Content-SHA256", fmt.Sprintf("%x", hash))
+	trailers.Set("X-Content-Length", fmt.Sprintf("%d", contentLength))
+
 	// Signal end of chunked body
 	w.WriteChunkedBodyDone()
+
+	// Write the trailers to the client
+	w.WriteTrailers(trailers)
 }

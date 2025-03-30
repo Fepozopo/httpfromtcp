@@ -12,6 +12,8 @@ const (
 	StatusCodeInternalServerError StatusCode = 500
 )
 
+// getStatusLine constructs the HTTP status line based on the provided status code.
+// It returns a byte slice representing the status line in the format "HTTP/1.1 <statusCode> <reasonPhrase>\r\n".
 func getStatusLine(statusCode StatusCode) []byte {
 	reasonPhrase := ""
 	switch statusCode {

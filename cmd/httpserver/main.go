@@ -55,6 +55,12 @@ func handler(w *response.Writer, req *request.Request) {
 		return
 	}
 
+	// Check if the request is for the video endpoint
+	if req.RequestLine.RequestTarget == "/video" {
+		handlerVideo(w, req)
+		return
+	}
+
 	// If the request is for any other URL, we handle it with handler200.
 	handler200(w, req)
 }
@@ -232,4 +238,51 @@ func proxyHandler(w *response.Writer, req *request.Request) {
 
 	// Write the trailers to the client
 	w.WriteTrailers(trailers)
+}
+
+// handlerVideo handles requests to /video
+func handlerVideo(w *response.Writer, req *request.Request) {
+	// Open the video file
+	file, err := os.Open("./assets/vim.mp4")
+	if err != nil {
+		w.WriteStatusLine(response.StatusCodeInternalServerError)
+		body := []byte(fmt.Sprintf("Internal Server Error: %v", err))
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
+		return
+	}
+	defer file.Close()
+
+	// Get the file info to set the content length
+	fileInfo, err := file.Stat()
+	if err != nil {
+		w.WriteStatusLine(response.StatusCodeInternalServerError)
+		body := []byte(fmt.Sprintf("Internal Server Error: %v", err))
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
+		return
+	}
+
+	// Read the video file
+	video, err := io.ReadAll(file)
+	if err != nil {
+		w.WriteStatusLine(response.StatusCodeInternalServerError)
+		body := []byte(fmt.Sprintf("Internal Server Error: %v", err))
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
+		return
+	}
+
+	// Write a 200 status line (OK) to the client
+	w.WriteStatusLine(response.StatusCodeSuccess)
+
+	// Set up the headers for the response
+	h := response.GetDefaultHeaders(int(fileInfo.Size()))
+	h.Override("Content-Type", "video/mp4")
+
+	// Write the headers to the client
+	w.WriteHeaders(h)
+
+	// Write the video to the client
+	w.WriteBody(video)
 }

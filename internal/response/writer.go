@@ -20,20 +20,7 @@ type Writer struct {
 	writer      io.Writer
 }
 
-// NewWriter creates a new Writer for the given io.Writer, starting in the
-// writerStateStatusLine state.
-//
-// A Writer is an object that is used to write an HTTP response to an
-// io.Writer. It keeps track of the current state of the response (status line,
-// headers, or body) and ensures that the response is written in the correct order.
-//
-// The Writer is created in the writerStateStatusLine state, which means that the
-// first call to WriteStatusLine will write the status line of the response to the
-// underlying io.Writer. After that, the Writer transitions to the writerStateHeaders
-// state, which means that the next call to WriteHeaders will write the headers of
-// the response. Finally, the Writer transitions to the writerStateBody state,
-// which means that all subsequent calls to WriteBody will write the body of the
-// response.
+// NewWriter creates a new Writer that writes to the provided io.Writer.
 func NewWriter(w io.Writer) *Writer {
 	return &Writer{
 		writerState: writerStateStatusLine,
@@ -112,4 +99,47 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 	}
 	// Write the body to the Writer and return the number of bytes written.
 	return w.writer.Write(p)
+}
+
+// WriteChunkedBody writes a chunk of the body of the HTTP response to the Writer.
+// It must be called only when the Writer is in the writerStateBody
+// state. If the Writer is in any other state, WriteChunkedBody will return
+// an error.
+//
+// The body is written directly to the Writer, and the number of bytes
+// written is returned.
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	// If the Writer is not in the writerStateBody state, we cannot write the body.
+	if w.writerState != writerStateBody {
+		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
+	}
+	// Write the chunk size in hexadecimal, followed by "\r\n", and then the chunk data.
+	chunkSize := fmt.Sprintf("%x\r\n", len(p))
+	_, err := w.writer.Write([]byte(chunkSize))
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.writer.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	_, err = w.writer.Write([]byte("\r\n"))
+	return n, err
+}
+
+// WriteChunkedBodyDone writes the final chunk of the body of the HTTP response to the Writer.
+// It must be called only when the Writer is in the writerStateBody
+// state. If the Writer is in any other state, WriteChunkedBodyDone will return
+// an error.
+//
+// The body is written directly to the Writer, and the number of bytes
+// written is returned.
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	// If the Writer is not in the writerStateBody state, we cannot write the body.
+	if w.writerState != writerStateBody {
+		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
+	}
+	// Write "0\r\n\r\n" to indicate the end of the body.
+	_, err := w.writer.Write([]byte("0\r\n\r\n"))
+	return 5, err
 }
